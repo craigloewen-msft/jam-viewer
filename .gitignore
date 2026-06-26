@@ -1,2 +1,7 @@
 /target
 /dist
+
+# ingest sidecar
+/server/.venv
+/server/_ingest_cache
+__pycache__/

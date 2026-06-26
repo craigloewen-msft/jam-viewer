@@ -1,5 +1,6 @@
 mod app;
 mod components;
+mod ingest;
 mod theory;
 
 use app::App;

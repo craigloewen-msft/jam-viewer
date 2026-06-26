@@ -193,6 +193,127 @@ pub fn pitch_class(open_pc: u8, fret: u8) -> u8 {
     (open_pc + fret) % 12
 }
 
+/// Parse a note name (with optional accidentals) into a pitch class (0-11).
+/// Accepts sharps (`#`, `s`) and flats (`b`). Returns `None` if unrecognized.
+fn parse_note_pc(s: &str) -> Option<u8> {
+    let mut chars = s.chars();
+    let letter = chars.next()?;
+    let base = match letter.to_ascii_uppercase() {
+        'C' => 0,
+        'D' => 2,
+        'E' => 4,
+        'F' => 5,
+        'G' => 7,
+        'A' => 9,
+        'B' => 11,
+        _ => return None,
+    };
+    let mut pc = base as i32;
+    for c in chars {
+        match c {
+            '#' | 's' => pc += 1,
+            'b' | 'B' => pc -= 1,
+            _ => return None,
+        }
+    }
+    Some(((pc % 12) + 12) as u8 % 12)
+}
+
+/// Map a chord-quality token (the part after the root) to a [`ChordQuality`].
+/// Handles both Harte notation (`maj`, `min`, `min7`, `7`, `maj7`) and common
+/// suffixes (`m`, `m7`, ``). Unknown/extended qualities fall back to the closest
+/// triad (major or minor) so any input song still renders.
+fn parse_quality(token: &str) -> ChordQuality {
+    let t = token.trim().to_ascii_lowercase();
+    // Strip a leading ':' separator used by Harte notation (e.g. "C:min7").
+    let t = t.strip_prefix(':').unwrap_or(&t);
+    match t {
+        "" | "maj" | "major" | "M" => ChordQuality::Major,
+        "min" | "minor" | "m" => ChordQuality::Minor,
+        "7" | "dom7" | "dom" => ChordQuality::Dominant7,
+        "maj7" | "major7" | "m7+5" => ChordQuality::Major7,
+        "min7" | "m7" | "minor7" => ChordQuality::Minor7,
+        _ => {
+            // Best-effort: anything that looks minor/diminished → minor triad,
+            // anything with a dominant 7 flavor → dominant 7, else major.
+            if t.starts_with("min") || t.starts_with("m") || t.starts_with("dim") {
+                if t.contains('7') {
+                    ChordQuality::Minor7
+                } else {
+                    ChordQuality::Minor
+                }
+            } else if t.contains("maj7") {
+                ChordQuality::Major7
+            } else if t.contains('7') {
+                ChordQuality::Dominant7
+            } else {
+                ChordQuality::Major
+            }
+        }
+    }
+}
+
+/// Parse a chord label into `(root pitch class, quality)`. Supports plain
+/// (`"Am"`, `"Gmaj7"`, `"C#m7"`), Harte (`"A:min"`, `"E:min7"`, `"G:7"`), and
+/// slash chords (`"C/E"` → uses the chord root, ignores the bass). Returns
+/// `None` for "no chord" markers (`"N"`, `"X"`, empty).
+pub fn parse_chord_label(label: &str) -> Option<(u8, ChordQuality)> {
+    let label = label.trim();
+    if label.is_empty() || label == "N" || label == "X" || label.eq_ignore_ascii_case("nc") {
+        return None;
+    }
+    // Drop any slash-bass annotation ("C/E", "A:min/b3").
+    let head = label.split('/').next().unwrap_or(label);
+
+    // Split root from quality. The root is the leading note name: a letter plus
+    // any immediately-following accidentals.
+    let bytes = head.as_bytes();
+    let mut i = 1usize.min(head.len());
+    while i < bytes.len() {
+        match bytes[i] as char {
+            '#' | 'b' | 's' => i += 1,
+            _ => break,
+        }
+    }
+    // Harte notation separates with ':'; handle that boundary too.
+    let (root_str, qual_str) = head.split_at(i);
+    let root = parse_note_pc(root_str)?;
+    let quality = parse_quality(qual_str);
+    Some((root, quality))
+}
+
+/// A chord placed on the audio timeline, in seconds. Produced by ingesting a
+/// real song; consumed by the player to drive the highlighted `current` chord.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TimedChord {
+    pub chord_root: u8,
+    pub chord_quality: ChordQuality,
+    /// Start time in seconds (inclusive).
+    pub start: f64,
+    /// End time in seconds (exclusive).
+    pub end: f64,
+}
+
+impl TimedChord {
+    /// Convert to a [`Section`], picking a sensible solo scale for the chord and
+    /// quantizing its duration to whole "beats" (seconds) for the timeline.
+    pub fn to_section(&self) -> Section {
+        let scale_type = match self.chord_quality {
+            ChordQuality::Minor | ChordQuality::Minor7 => ScaleType::MinorPentatonic,
+            ChordQuality::Dominant7 => ScaleType::Mixolydian,
+            _ => ScaleType::MajorPentatonic,
+        };
+        let beats = (self.end - self.start).round().max(1.0) as usize;
+        Section {
+            chord_root: self.chord_root,
+            chord_quality: self.chord_quality,
+            scale_root: self.chord_root,
+            scale_type,
+            beats,
+        }
+    }
+}
+
 /// Number of inlay dots drawn on a fret marker (0 = none, 1 = single, 2 = double).
 pub fn fret_marker(fret: u8) -> u8 {
     match fret {
@@ -335,6 +456,64 @@ pub fn caged_shapes(root: u8) -> Vec<CagedPlacement> {
         }
     }
     out
+}
+
+/// Guess the song key from a list of timed chords. Scores all 24 major and
+/// natural-minor keys by how much of the (duration-weighted) chord content is
+/// diatonic to each, then breaks the inevitable relative-major/minor tie by
+/// favoring the mode whose tonic chord is more prominent. Falls back to C major
+/// for empty input.
+pub fn guess_key(chords: &[TimedChord]) -> (u8, ScaleType) {
+    if chords.is_empty() {
+        return (0, ScaleType::Major);
+    }
+
+    // Duration weight of chords rooted on each pitch class (for tonic tie-break).
+    let mut root_weight = [0.0f64; 12];
+    for c in chords {
+        root_weight[(c.chord_root % 12) as usize] += (c.end - c.start).max(0.0);
+    }
+
+    let candidates = [ScaleType::Major, ScaleType::NaturalMinor];
+    let mut best: Option<(f64, f64, u8, ScaleType)> = None; // (diatonic, tonic_w, root, scale)
+
+    for tonic in 0u8..12 {
+        for scale in candidates {
+            let pcs: Vec<u8> = scale.intervals().iter().map(|i| (tonic + i) % 12).collect();
+            // Diatonic score: full weight when every chord tone fits the scale,
+            // half when only the root fits.
+            let mut diatonic = 0.0;
+            for c in chords {
+                let dur = (c.end - c.start).max(0.0);
+                let tones: Vec<u8> = c
+                    .chord_quality
+                    .intervals()
+                    .iter()
+                    .map(|i| (c.chord_root + i) % 12)
+                    .collect();
+                let all_in = tones.iter().all(|t| pcs.contains(t));
+                let root_in = pcs.contains(&(c.chord_root % 12));
+                if all_in {
+                    diatonic += dur;
+                } else if root_in {
+                    diatonic += dur * 0.5;
+                }
+            }
+            let tonic_w = root_weight[tonic as usize];
+            let better = match best {
+                None => true,
+                Some((bd, btw, _, _)) => {
+                    diatonic > bd + 1e-6 || ((diatonic - bd).abs() <= 1e-6 && tonic_w > btw)
+                }
+            };
+            if better {
+                best = Some((diatonic, tonic_w, tonic, scale));
+            }
+        }
+    }
+
+    let (_, _, root, scale) = best.unwrap();
+    (root, scale)
 }
 
 /// A whole song: a base key plus an ordered list of sections that loops.
