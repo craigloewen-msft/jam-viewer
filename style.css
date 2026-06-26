@@ -1,0 +1,531 @@
+:root {
+  --bg: #0d1018;
+  --bg-2: #141925;
+  --panel: #1b2233;
+  --panel-2: #232c42;
+  --line: #2c374f;
+  --text: #e8edf7;
+  --muted: #8b97b3;
+  --root: #ff5c7a;
+  --chord: #4cc2ff;
+  --scale: #46d18a;
+  --accent: #7c8cff;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: radial-gradient(1200px 800px at 50% -10%, #19203180, transparent),
+    var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------------- (top banner removed — the timeline is the header now) ---------------- */
+.scale-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--scale);
+  box-shadow: 0 0 12px var(--scale);
+}
+
+.key-tag {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  color: #0c1018;
+  background: linear-gradient(180deg, #d9c9a3, #b89f74);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+/* ---------------- Timeline (sliding chord conveyor) ---------------- */
+.timeline {
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px 18px 18px;
+  box-shadow: var(--shadow);
+}
+
+.tl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.tl-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-key {
+  font-size: 14px;
+  font-weight: 700;
+  color: #cdd6ee;
+}
+
+.tl-scale {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--scale);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tl-beat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-beat-num {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.tl-beat-sep,
+.tl-beat-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tl-beat-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+/* Clipped viewport; the right edge fades so upcoming chords trail off. */
+.tl-viewport {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+  mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+
+.tl-track {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+
+.tl-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0.55;
+  transition: opacity 0.45s ease, border-color 0.45s ease,
+    box-shadow 0.45s ease, background-color 0.45s ease, transform 0.45s ease;
+}
+
+/* Beat-progress fill. */
+.tl-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(90deg, rgba(124, 140, 255, 0.16), rgba(124, 140, 255, 0.34));
+  transition: width 0.35s linear;
+  z-index: 0;
+}
+
+.tl-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tl-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+  transition: font-size 0.3s ease, color 0.3s ease;
+}
+
+.tl-beats {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.tl-tag {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  z-index: 2;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  color: #0c1018;
+  background: var(--accent);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.tl-seg.past {
+  opacity: 0.28;
+}
+
+.tl-seg.next {
+  opacity: 0.85;
+  border-color: #3b466a;
+}
+
+.tl-seg.now {
+  opacity: 1;
+  border-color: var(--accent);
+  background: var(--panel-2);
+  box-shadow: 0 0 0 1px var(--accent), 0 10px 26px rgba(124, 140, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.tl-seg.now .tl-name {
+  color: #fff;
+  font-size: 30px;
+}
+
+.tl-seg.incoming {
+  border-color: var(--accent);
+  animation: nextpulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes nextpulse {
+  from {
+    box-shadow: 0 0 10px rgba(124, 140, 255, 0.18);
+  }
+  to {
+    box-shadow: 0 0 22px rgba(124, 140, 255, 0.5);
+  }
+}
+
+/* ---------------- Stage / fretboard ---------------- */
+.stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board-wrap {
+  width: 100%;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: 44px repeat(11, minmax(0, 1fr));
+  gap: 0;
+  background: linear-gradient(180deg, #2a2017, #1c150d);
+  border: 1px solid #0c0a07;
+  border-radius: 16px;
+  padding: 10px 10px 14px;
+  box-shadow: var(--shadow), inset 0 0 60px rgba(0, 0, 0, 0.4);
+}
+
+.corner {
+  height: 30px;
+}
+
+.fret-num {
+  height: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #c8b48f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inlay {
+  display: flex;
+  gap: 3px;
+  height: 7px;
+  margin-top: 2px;
+}
+
+.inlay i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #efe3c8;
+  box-shadow: 0 0 6px rgba(239, 227, 200, 0.5);
+}
+
+.string-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d9c9a3;
+  font-weight: 700;
+  font-size: 14px;
+  background: linear-gradient(90deg, #221a11, transparent);
+}
+
+.cell {
+  position: relative;
+  height: 52px;
+  border-right: 2px solid #5a4a32;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* the string wire */
+.cell::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, #9a9a9a, #d9d9d9, #9a9a9a);
+  opacity: 0.5;
+}
+
+.note {
+  position: relative;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0c1018;
+  background: transparent;
+  border: 2px solid transparent;
+  transform: scale(0.2);
+  opacity: 0;
+  transition: transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 0.38s ease, border-color 0.38s ease, color 0.3s ease,
+    box-shadow 0.38s ease, opacity 0.3s ease;
+}
+
+/* Overall song scale — always shown, faint, sits under everything. */
+.cell.song .note {
+  opacity: 0.92;
+  transform: scale(0.72);
+  color: #aeb9d6;
+  background: rgba(120, 140, 190, 0.14);
+  border-color: #454f6c;
+}
+
+.cell.scale .note {
+  opacity: 1;
+  transform: scale(0.92);
+  color: var(--scale);
+  border-color: var(--scale);
+  background: rgba(70, 209, 138, 0.1);
+  box-shadow: 0 0 0 1px rgba(70, 209, 138, 0.18);
+}
+
+.cell.chord .note {
+  opacity: 1;
+  transform: scale(1);
+  color: #0c1018;
+  background: var(--chord);
+  border-color: var(--chord);
+  box-shadow: 0 0 16px rgba(76, 194, 255, 0.55);
+}
+
+.cell.root .note {
+  opacity: 1;
+  transform: scale(1.14);
+  color: #fff;
+  background: var(--root);
+  border-color: var(--root);
+  box-shadow: 0 0 22px rgba(255, 92, 122, 0.7);
+}
+
+/* ---------------- Legend ---------------- */
+.legend {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.key.root i {
+  background: var(--root);
+}
+
+.key.chord i {
+  background: var(--chord);
+}
+
+.key.scale i {
+  background: transparent;
+  border: 2px solid var(--scale);
+}
+
+.key.song-note i {
+  background: rgba(120, 140, 190, 0.18);
+  border: 1.5px solid #454f6c;
+}
+
+/* ---------------- Transport ---------------- */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 18px;
+  box-shadow: var(--shadow);
+}
+
+.btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.06s ease;
+}
+
+.btn:hover {
+  background: #2c3753;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn.play {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0c1018;
+}
+
+.tempo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tempo label {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tempo input[type="range"] {
+  width: 160px;
+  accent-color: var(--accent);
+}
+
+.bpm {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 64px;
+}
+
+.progression {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.prog-chip {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.12s ease;
+}
+
+.prog-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0c1018;
+  box-shadow: 0 0 16px rgba(124, 140, 255, 0.5);
+}
+
+@media (max-width: 720px) {
+  .chord-name {
+    font-size: 52px;
+  }
+  .cell {
+    height: 42px;
+  }
+  .note {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+  .progression {
+    margin-left: 0;
+  }
+}
