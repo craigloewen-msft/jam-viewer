@@ -43,4 +43,9 @@ C major. A continuously **sliding timeline** at the top doubles as the header
 advancing to the next chord slides the strip smoothly rather than snapping. The
 fretboard shows four layers — chord root, chord tones, the current chord's scale,
 and the overall **song scale** (always shown) — and the notes animate cleanly
-between states as the chord changes. Real music ingestion is a future step.
+between states as the chord changes. A **CAGED** toggle in the transport bar
+swaps the layer view for the five movable major chord shapes (C-A-G-E-D) of the
+current chord, color-coded with connecting boundary boxes. The fret window
+(currently frets 7–17) is driven entirely by the `FRET_MIN`/`FRET_MAX` constants
+in `src/theory.rs`, so it — and the CAGED overlay — can be retuned by editing
+only those two values. Real music ingestion is a future step.

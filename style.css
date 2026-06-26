@@ -10,6 +10,12 @@
   --chord: #4cc2ff;
   --scale: #46d18a;
   --accent: #7c8cff;
+  /* CAGED shape colors */
+  --caged-c: #ff7a59;
+  --caged-a: #ffd34d;
+  --caged-g: #57e0a0;
+  --caged-e: #5cc8ff;
+  --caged-d: #c08bff;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
 }
@@ -384,6 +390,164 @@ body {
   box-shadow: 0 0 22px rgba(255, 92, 122, 0.7);
 }
 
+/* ---------------- CAGED overlay ---------------- */
+/* The board and the boundary-box overlay are stacked; the overlay mirrors the
+   board's fret columns so boxes line up at any fret range. */
+.board-stack {
+  position: relative;
+}
+
+.caged-overlay {
+  position: absolute;
+  /* board border (1px) + padding-top (10px) + header row (30px) = 41px */
+  top: 41px;
+  left: 11px;
+  right: 11px;
+  bottom: 15px;
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  gap: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 3;
+}
+
+.caged-overlay.show {
+  opacity: 1;
+}
+
+.caged-box {
+  position: relative;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  margin: 4px 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.caged-badge {
+  position: absolute;
+  top: -10px;
+  left: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #0c1018;
+  background: var(--accent);
+}
+
+.caged-box-c {
+  border-color: var(--caged-c);
+  background: rgba(255, 122, 89, 0.07);
+}
+.caged-box-c .caged-badge {
+  background: var(--caged-c);
+}
+.caged-box-a {
+  border-color: var(--caged-a);
+  background: rgba(255, 211, 77, 0.07);
+}
+.caged-box-a .caged-badge {
+  background: var(--caged-a);
+}
+.caged-box-g {
+  border-color: var(--caged-g);
+  background: rgba(87, 224, 160, 0.07);
+}
+.caged-box-g .caged-badge {
+  background: var(--caged-g);
+}
+.caged-box-e {
+  border-color: var(--caged-e);
+  background: rgba(92, 200, 255, 0.07);
+}
+.caged-box-e .caged-badge {
+  background: var(--caged-e);
+}
+.caged-box-d {
+  border-color: var(--caged-d);
+  background: rgba(192, 139, 255, 0.07);
+}
+.caged-box-d .caged-badge {
+  background: var(--caged-d);
+}
+
+/* CAGED note coloring. Notes not in any shape fade back. */
+.cell.caged-off .note {
+  opacity: 0.18;
+  transform: scale(0.6);
+  color: #6f7a96;
+  background: transparent;
+  border-color: #333c54;
+}
+
+.cell.caged .note {
+  opacity: 1;
+  transform: scale(0.92);
+  color: #0c1018;
+}
+
+.cell.caged-c .note {
+  background: var(--caged-c);
+  border-color: var(--caged-c);
+}
+.cell.caged-a .note {
+  background: var(--caged-a);
+  border-color: var(--caged-a);
+}
+.cell.caged-g .note {
+  background: var(--caged-g);
+  border-color: var(--caged-g);
+}
+.cell.caged-e .note {
+  background: var(--caged-e);
+  border-color: var(--caged-e);
+}
+.cell.caged-d .note {
+  background: var(--caged-d);
+  border-color: var(--caged-d);
+}
+
+/* Roots get a bold white ring and a slight bump. */
+.cell.caged-root .note {
+  transform: scale(1.12);
+  color: #fff;
+  box-shadow: 0 0 0 2px #0c1018, 0 0 0 4px currentColor, 0 0 16px rgba(0, 0, 0, 0.5);
+}
+.cell.caged-c.caged-root .note {
+  color: var(--caged-c);
+}
+.cell.caged-a.caged-root .note {
+  color: var(--caged-a);
+}
+.cell.caged-g.caged-root .note {
+  color: var(--caged-g);
+}
+.cell.caged-e.caged-root .note {
+  color: var(--caged-e);
+}
+.cell.caged-d.caged-root .note {
+  color: var(--caged-d);
+}
+.cell.caged-root .note {
+  background: #0c1018;
+}
+
+/* Cells shared by two adjacent shapes get a small corner tick. */
+.cell.caged-shared .note::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+
 /* ---------------- Legend ---------------- */
 .legend {
   display: flex;
@@ -425,6 +589,26 @@ body {
   border: 1.5px solid #454f6c;
 }
 
+.legend.hidden {
+  display: none;
+}
+
+.caged-legend .caged-key-c i {
+  background: var(--caged-c);
+}
+.caged-legend .caged-key-a i {
+  background: var(--caged-a);
+}
+.caged-legend .caged-key-g i {
+  background: var(--caged-g);
+}
+.caged-legend .caged-key-e i {
+  background: var(--caged-e);
+}
+.caged-legend .caged-key-d i {
+  background: var(--caged-d);
+}
+
 /* ---------------- Transport ---------------- */
 .transport {
   display: flex;
@@ -462,6 +646,13 @@ body {
   background: var(--accent);
   border-color: var(--accent);
   color: #0c1018;
+}
+
+.btn.caged-toggle.is-on {
+  background: linear-gradient(90deg, var(--caged-c), var(--caged-d));
+  border-color: var(--caged-e);
+  color: #0c1018;
+  box-shadow: 0 0 16px rgba(124, 140, 255, 0.45);
 }
 
 .tempo {

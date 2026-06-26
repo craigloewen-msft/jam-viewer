@@ -157,6 +157,141 @@ pub fn fret_marker(fret: u8) -> u8 {
     }
 }
 
+/// The five movable major chord shapes of the CAGED system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CagedShape {
+    C,
+    A,
+    G,
+    E,
+    D,
+}
+
+impl CagedShape {
+    /// All five shapes, in CAGED order.
+    pub const ALL: [CagedShape; 5] = [
+        CagedShape::C,
+        CagedShape::A,
+        CagedShape::G,
+        CagedShape::E,
+        CagedShape::D,
+    ];
+
+    /// Single-letter label, e.g. "C".
+    pub fn letter(self) -> &'static str {
+        match self {
+            CagedShape::C => "C",
+            CagedShape::A => "A",
+            CagedShape::G => "G",
+            CagedShape::E => "E",
+            CagedShape::D => "D",
+        }
+    }
+
+    /// Lower-case slug used for CSS classes, e.g. "c".
+    pub fn slug(self) -> &'static str {
+        match self {
+            CagedShape::C => "c",
+            CagedShape::A => "a",
+            CagedShape::G => "g",
+            CagedShape::E => "e",
+            CagedShape::D => "d",
+        }
+    }
+
+    /// Pitch class of the shape's nominal open-chord root (C, A, G, E, D).
+    fn base_root(self) -> u8 {
+        match self {
+            CagedShape::C => 0,
+            CagedShape::A => 9,
+            CagedShape::G => 7,
+            CagedShape::E => 4,
+            CagedShape::D => 2,
+        }
+    }
+
+    /// Open-chord fret per string, in `STRINGS` order (high-e first); `None`
+    /// marks a muted string. Moving the whole pattern up by `shift` semitones
+    /// transposes the shape to any root.
+    fn open_frets(self) -> [Option<u8>; 6] {
+        // Order matches STRINGS: [e, B, G, D, A, E].
+        match self {
+            CagedShape::C => [Some(0), Some(1), Some(0), Some(2), Some(3), None],
+            CagedShape::A => [Some(0), Some(2), Some(2), Some(2), Some(0), None],
+            CagedShape::G => [Some(3), Some(0), Some(0), Some(0), Some(2), Some(3)],
+            CagedShape::E => [Some(0), Some(0), Some(1), Some(2), Some(2), Some(0)],
+            CagedShape::D => [Some(2), Some(3), Some(2), Some(0), None, None],
+        }
+    }
+}
+
+/// One fretted note belonging to a CAGED shape placement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CagedCell {
+    /// Index into `STRINGS` (high-e first).
+    pub string_index: usize,
+    pub fret: u8,
+    /// Whether this note is a root of the chord.
+    pub is_root: bool,
+}
+
+/// One occurrence of a CAGED shape inside the visible fret window. A shape can
+/// appear more than once (octave copies); each occurrence is its own placement
+/// with its own bounding box.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CagedPlacement {
+    pub shape: CagedShape,
+    pub cells: Vec<CagedCell>,
+    /// Inclusive fret span of the box, already clamped to the visible window.
+    pub min_fret: u8,
+    pub max_fret: u8,
+}
+
+/// Compute the visible CAGED shape placements for a major chord rooted at
+/// `root`. Shapes are clipped to `FRET_MIN..=FRET_MAX`, so this works for any
+/// fret window — change only `FRET_MIN`/`FRET_MAX` to retune the board.
+pub fn caged_shapes(root: u8) -> Vec<CagedPlacement> {
+    let r = root % 12;
+    let mut out = Vec::new();
+    // Enough octave copies to cover any window up to FRET_MAX.
+    let k_max = FRET_MAX as i32 / 12 + 1;
+
+    for shape in CagedShape::ALL {
+        let shift = (12 + r as i32 - shape.base_root() as i32) % 12; // 0..=11
+        let frets = shape.open_frets();
+
+        for k in -2..=k_max {
+            let mut cells = Vec::new();
+            for (i, open) in frets.iter().enumerate() {
+                let Some(f) = open else { continue };
+                let fret = *f as i32 + shift + 12 * k;
+                if fret < FRET_MIN as i32 || fret > FRET_MAX as i32 {
+                    continue;
+                }
+                let fret = fret as u8;
+                let is_root = pitch_class(STRINGS[i].open_pc, fret) == r;
+                cells.push(CagedCell {
+                    string_index: i,
+                    fret,
+                    is_root,
+                });
+            }
+            if cells.is_empty() {
+                continue;
+            }
+            let min_fret = cells.iter().map(|c| c.fret).min().unwrap();
+            let max_fret = cells.iter().map(|c| c.fret).max().unwrap();
+            out.push(CagedPlacement {
+                shape,
+                cells,
+                min_fret,
+                max_fret,
+            });
+        }
+    }
+    out
+}
+
 /// A whole song: a base key plus an ordered list of sections that loops.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Song {
@@ -212,6 +347,13 @@ pub fn demo_song() -> Song {
                 chord_quality: ChordQuality::Major,
                 scale_root: 0,
                 scale_type: ScaleType::Major,
+                beats: 4,
+            },
+            Section {
+                chord_root: 4, // E (Em — diatonic iii chord of C major)
+                chord_quality: ChordQuality::Minor,
+                scale_root: 4,
+                scale_type: ScaleType::MinorPentatonic,
                 beats: 4,
             },
             Section {

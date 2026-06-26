@@ -17,6 +17,9 @@ pub fn App() -> impl IntoView {
     let (playing, set_playing) = signal(true);
     let (bpm, set_bpm) = signal(100u32);
     let (total, set_total) = signal(0usize);
+    // CAGED overlay toggle.
+    let (caged, set_caged) = signal(false);
+    let caged = Memo::new(move |_| caged.get());
 
     // Drive the beat counter. Re-create the interval whenever play/pause or the
     // tempo changes, clearing the previous one.
@@ -46,6 +49,7 @@ pub fn App() -> impl IntoView {
 
     let toggle_play = move |_| set_playing.update(|p| *p = !*p);
     let restart = move |_| set_total.set(0);
+    let toggle_caged = move |_| set_caged.update(|c| *c = !*c);
 
     view! {
         <div class="app">
@@ -57,7 +61,7 @@ pub fn App() -> impl IntoView {
             />
 
             <main class="stage">
-                <Fretboard current=current key_pcs=key_pcs/>
+                <Fretboard current=current key_pcs=key_pcs caged=caged/>
             </main>
 
             <footer class="transport">
@@ -65,6 +69,13 @@ pub fn App() -> impl IntoView {
                     {move || if playing.get() { "⏸ Pause" } else { "▶ Play" }}
                 </button>
                 <button class="btn" on:click=restart>"⏮ Restart"</button>
+                <button
+                    class="btn caged-toggle"
+                    class:is-on=move || caged.get()
+                    on:click=toggle_caged
+                >
+                    {move || if caged.get() { "CAGED ✓" } else { "CAGED" }}
+                </button>
 
                 <div class="tempo">
                     <label>"Tempo"</label>
