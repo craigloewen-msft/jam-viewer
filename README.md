@@ -43,4 +43,7 @@ C major. A continuously **sliding timeline** at the top doubles as the header
 advancing to the next chord slides the strip smoothly rather than snapping. The
 fretboard shows four layers — chord root, chord tones, the current chord's scale,
 and the overall **song scale** (always shown) — and the notes animate cleanly
-between states as the chord changes. Real music ingestion is a future step.
+between states as the chord changes. On the sliding timeline each chord shows its
+letter name with its **Roman numeral** in the key beneath it (e.g. in C major:
+`Am`→`vi`, `F`→`IV`, `C`→`I`, `G7`→`V7`), so you can read each chord's place in
+the scale. Real music ingestion is a future step.
