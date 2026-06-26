@@ -10,6 +10,7 @@ pub fn App() -> impl IntoView {
     // The song is static for now; store it so reactive closures can read it.
     let song = StoredValue::new(demo_song());
     let key_name = song.with_value(|s| s.key_name());
+    let key_root = song.with_value(|s| s.key_root);
     let key_pcs = song.with_value(|s| s.key_pcs());
     let sections = song.with_value(|s| s.sections.clone());
 
@@ -58,6 +59,7 @@ pub fn App() -> impl IntoView {
                 ordinal=ordinal
                 beat_in=beat_in
                 key_name=key_name
+                key_root=key_root
             />
 
             <main class="stage">

@@ -6,6 +6,9 @@ pub const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
+/// Roman numerals for the seven scale degrees.
+const ROMAN_NUMERALS: [&str; 7] = ["I", "II", "III", "IV", "V", "VI", "VII"];
+
 /// Standard-tuning open-string pitch classes, ordered as they are drawn on the
 /// board (top row = high e, bottom row = low E).
 pub const STRINGS: [GuitarString; 6] = [
@@ -113,6 +116,48 @@ impl Section {
             NOTE_NAMES[self.chord_root as usize % 12],
             self.chord_quality.suffix()
         )
+    }
+
+    /// The chord's place in a key, as a Roman numeral relative to `key_root`
+    /// (e.g. in C major: Am -> "vi", F -> "IV", C -> "I", G7 -> "V7"). Case
+    /// reflects quality (upper = major-ish, lower = minor-ish); a leading "b"
+    /// marks a chromatic (non-diatonic) root.
+    pub fn roman_numeral(&self, key_root: u8) -> String {
+        let semis = (self.chord_root + 12 - key_root % 12) % 12;
+        // Map the semitone distance to a major-scale degree plus accidental.
+        let (degree_idx, accidental) = match semis {
+            0 => (0, ""),
+            1 => (1, "b"),
+            2 => (1, ""),
+            3 => (2, "b"),
+            4 => (2, ""),
+            5 => (3, ""),
+            6 => (4, "b"),
+            7 => (4, ""),
+            8 => (5, "b"),
+            9 => (5, ""),
+            10 => (6, "b"),
+            _ => (6, ""), // 11
+        };
+
+        let minorish = matches!(
+            self.chord_quality,
+            ChordQuality::Minor | ChordQuality::Minor7
+        );
+        let numeral = if minorish {
+            ROMAN_NUMERALS[degree_idx].to_lowercase()
+        } else {
+            ROMAN_NUMERALS[degree_idx].to_string()
+        };
+
+        // The minor "m" is implied by lowercase, so only carry 7th info.
+        let suffix = match self.chord_quality {
+            ChordQuality::Major | ChordQuality::Minor => "",
+            ChordQuality::Dominant7 | ChordQuality::Minor7 => "7",
+            ChordQuality::Major7 => "maj7",
+        };
+
+        format!("{}{}{}", accidental, numeral, suffix)
     }
 
     /// Display name of the scale, e.g. "A Natural Minor".

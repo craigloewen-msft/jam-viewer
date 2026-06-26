@@ -37,10 +37,13 @@ but it's for full-stack/SSR apps — this one is client-only.)
 | `src/components/timeline.rs`  | Sliding chord timeline (also the header)         |
 | `src/components/fretboard.rs` | Fretboard visualization                          |
 
-The song is currently a hard-coded looping demo (`Am → F → C → G7`) in the key of
-C major. A continuously **sliding timeline** at the top doubles as the header
-(key, current scale, beat counter) and shows the repeating chords coming up;
-advancing to the next chord slides the strip smoothly rather than snapping. The
+The song is currently a hard-coded looping demo (`Am → F → C → Em → G7`) in the
+key of C major. A continuously **sliding timeline** at the top doubles as the
+header (key, current scale, beat counter) and shows the repeating chords coming
+up; advancing to the next chord slides the strip smoothly rather than snapping.
+Each chord on the timeline shows its letter name with its **Roman numeral** in
+the key beneath it (e.g. in C major: `Am`→`vi`, `F`→`IV`, `C`→`I`, `Em`→`iii`,
+`G7`→`V7`), so you can read each chord's place in the scale. The
 fretboard shows four layers — chord root, chord tones, the current chord's scale,
 and the overall **song scale** (always shown) — and the notes animate cleanly
 between states as the chord changes. A **CAGED** toggle in the transport bar

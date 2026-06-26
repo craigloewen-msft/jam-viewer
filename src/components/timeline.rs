@@ -21,6 +21,7 @@ pub fn Timeline(
     ordinal: Memo<usize>,
     beat_in: Memo<usize>,
     key_name: String,
+    key_root: u8,
 ) -> impl IntoView {
     let len = sections.len().max(1);
     let sections = StoredValue::new(sections);
@@ -63,7 +64,8 @@ pub fn Timeline(
                     <For each=window key=|o| *o let:ord>
                         {
                             let section = sections.with_value(|s| s[ord % len]);
-                            let name = section.chord_name();
+                            let name = section.roman_numeral(key_root);
+                            let chord = section.chord_name();
                             let beats = section.beats;
 
                             let is_now = move || ord == ordinal.get();
@@ -104,7 +106,8 @@ pub fn Timeline(
                                 <div class=seg_class style=seg_style>
                                     <div class="tl-fill" style=fill_style></div>
                                     <div class="tl-body">
-                                        <span class="tl-name">{name}</span>
+                                        <span class="tl-name">{chord}</span>
+                                        <span class="tl-degree">{name}</span>
                                         <span class="tl-beats">{format!("{} beats", beats)}</span>
                                     </div>
                                     {move || is_now().then(|| view! { <span class="tl-tag">"NOW"</span> })}
