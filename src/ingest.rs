@@ -28,7 +28,7 @@ struct ChordEntry {
     chord: String,
 }
 
-/// Response of `/api/recognize-chords` (and the sidecar's youtube endpoint).
+/// Response of the sidecar's ingest / song endpoints.
 #[derive(Debug, Deserialize)]
 struct RecognizeResponse {
     #[serde(default)]
@@ -37,14 +37,45 @@ struct RecognizeResponse {
     chords: Vec<ChordEntry>,
     #[serde(default)]
     error: Option<String>,
-    /// Only present on the sidecar response: URL to stream the audio back.
+    /// Stable song id in the persistent cache (e.g. `yt_<videoId>`).
+    #[serde(default)]
+    id: Option<String>,
+    /// Human-readable title (YouTube title or uploaded filename).
+    #[serde(default)]
+    title: Option<String>,
+    /// URL to stream the cached audio back (relative `/api/audio/<id>`).
     #[serde(default)]
     audio_url: Option<String>,
+}
+
+/// One entry in the persistent song library (`GET /api/library`).
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct LibraryEntry {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub duration: f64,
+    /// Number of detected chord spans.
+    #[serde(default)]
+    pub chords: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct LibraryResponse {
+    #[serde(default)]
+    songs: Vec<LibraryEntry>,
 }
 
 /// The fully-parsed result of ingesting a song.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IngestResult {
+    /// Stable song id in the persistent cache, if known.
+    pub id: Option<String>,
+    /// Human-readable title, if known.
+    pub title: Option<String>,
     /// Timed chords, sorted by start time, with no-chord gaps dropped.
     pub chords: Vec<TimedChord>,
     /// Guessed tonic pitch class.
@@ -78,20 +109,37 @@ fn parse_entries(mut entries: Vec<ChordEntry>) -> Vec<TimedChord> {
     out
 }
 
-/// Build an [`IngestResult`] from parsed chords plus a playback URL.
-fn build_result(chords: Vec<TimedChord>, audio_url: String) -> Result<IngestResult, String> {
+/// Build an [`IngestResult`], carrying through the cache id and title.
+fn build_result_with(
+    chords: Vec<TimedChord>,
+    audio_url: String,
+    id: Option<String>,
+    title: Option<String>,
+) -> Result<IngestResult, String> {
     if chords.is_empty() {
         return Err("No chords were detected in this audio.".to_string());
     }
     let (key_root, key_scale) = guess_key(&chords);
     let duration = chords.last().map(|c| c.end).unwrap_or(0.0);
     Ok(IngestResult {
+        id,
+        title,
         chords,
         key_root,
         key_scale,
         audio_url,
         duration,
     })
+}
+
+/// Resolve an audio URL returned by the sidecar (often relative) to an absolute
+/// URL the `<audio>` element can load.
+fn absolute_audio_url(sidecar: &str, audio_path: &str) -> String {
+    if audio_path.starts_with("http") {
+        audio_path.to_string()
+    } else {
+        format!("{}{}", sidecar.trim_end_matches('/'), audio_path)
+    }
 }
 
 /// Recognize chords in an uploaded file by POSTing it to the ingest sidecar
@@ -124,7 +172,7 @@ pub async fn recognize_file(
             .error
             .unwrap_or_else(|| "Server reported failure".to_string()));
     }
-    build_result(parse_entries(parsed.chords), audio_url)
+    build_result_with(parse_entries(parsed.chords), audio_url, parsed.id, parsed.title)
 }
 
 /// Ingest a YouTube URL via the sidecar: it downloads the audio, runs chord
@@ -153,11 +201,47 @@ pub async fn ingest_youtube(sidecar_url: &str, youtube_url: &str) -> Result<Inge
         .audio_url
         .clone()
         .ok_or_else(|| "Sidecar did not return an audio URL".to_string())?;
-    // The sidecar returns a relative path like "/api/audio/<id>"; make absolute.
-    let audio_url = if audio_path.starts_with("http") {
-        audio_path
-    } else {
-        format!("{}{}", sidecar, audio_path)
-    };
-    build_result(parse_entries(parsed.chords), audio_url)
+    let audio_url = absolute_audio_url(sidecar, &audio_path);
+    build_result_with(parse_entries(parsed.chords), audio_url, parsed.id, parsed.title)
+}
+
+/// Fetch the list of previously analyzed songs from the sidecar's persistent
+/// library (`GET /api/library`), newest first.
+pub async fn fetch_library(sidecar_url: &str) -> Result<Vec<LibraryEntry>, String> {
+    let sidecar = sidecar_url.trim_end_matches('/');
+    let url = format!("{}/api/library", sidecar);
+    let resp = gloo_net::http::Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach ingest sidecar at {url}: {e}"))?;
+    let parsed: LibraryResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid library response: {e}"))?;
+    Ok(parsed.songs)
+}
+
+/// Load a cached song's full analysis by id (`GET /api/song/<id>`).
+pub async fn load_song(sidecar_url: &str, id: &str) -> Result<IngestResult, String> {
+    let sidecar = sidecar_url.trim_end_matches('/');
+    let url = format!("{}/api/song/{}", sidecar, id);
+    let resp = gloo_net::http::Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach ingest sidecar at {url}: {e}"))?;
+    let parsed: RecognizeResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid sidecar response: {e}"))?;
+    if !parsed.success {
+        return Err(parsed
+            .error
+            .unwrap_or_else(|| "Song not found in library".to_string()));
+    }
+    let audio_path = parsed
+        .audio_url
+        .clone()
+        .ok_or_else(|| "Sidecar did not return an audio URL".to_string())?;
+    let audio_url = absolute_audio_url(sidecar, &audio_path);
+    build_result_with(parse_entries(parsed.chords), audio_url, parsed.id, parsed.title)
 }

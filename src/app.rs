@@ -7,7 +7,10 @@ use web_sys::{HtmlInputElement, Url};
 
 use crate::components::fretboard::Fretboard;
 use crate::components::timeline::Timeline;
-use crate::ingest::{ingest_youtube, recognize_file, IngestResult, DEFAULT_SIDECAR_URL};
+use crate::ingest::{
+    fetch_library, ingest_youtube, load_song, recognize_file, IngestResult, LibraryEntry,
+    DEFAULT_SIDECAR_URL,
+};
 use crate::theory::{demo_song, locate, section_ordinal, Section, NOTE_NAMES};
 
 /// Root component: an ingestion panel on top, and below it either the built-in
@@ -38,8 +41,24 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
     let status = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let show_advanced = RwSignal::new(false);
+    // Previously analyzed songs from the sidecar's persistent cache.
+    let library = RwSignal::new(Vec::<LibraryEntry>::new());
 
     let file_ref = NodeRef::<leptos::html::Input>::new();
+
+    // Reload the library listing from the sidecar.
+    let refresh_library = move || {
+        let backend = server_url.get_untracked();
+        spawn_local(async move {
+            if let Ok(songs) = fetch_library(&backend).await {
+                library.set(songs);
+            }
+        });
+    };
+    // Populate the library on first render.
+    Effect::new(move |_| {
+        refresh_library();
+    });
 
     // Analyze an uploaded file: POST straight to the ChordMini container and
     // play it back from a browser object URL.
@@ -70,6 +89,7 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
                 Ok(result) => {
                     status.set(format!("Loaded {} chords.", result.chords.len()));
                     ingested.set(Some(result));
+                    refresh_library();
                 }
                 Err(e) => error.set(Some(e)),
             }
@@ -90,6 +110,26 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
         status.set("Downloading & analyzing from YouTube… (this can take a minute)".into());
         spawn_local(async move {
             match ingest_youtube(&sidecar, &url).await {
+                Ok(result) => {
+                    status.set(format!("Loaded {} chords.", result.chords.len()));
+                    ingested.set(Some(result));
+                    refresh_library();
+                }
+                Err(e) => error.set(Some(e)),
+            }
+            loading.set(false);
+        });
+    };
+
+    // Load a previously analyzed song from the library cache (instant — no
+    // re-download or re-analysis).
+    let load_from_library = move |id: String, title: String| {
+        error.set(None);
+        let backend = server_url.get();
+        loading.set(true);
+        status.set(format!("Loading “{title}” from library…"));
+        spawn_local(async move {
+            match load_song(&backend, &id).await {
                 Ok(result) => {
                     status.set(format!("Loaded {} chords.", result.chords.len()));
                     ingested.set(Some(result));
@@ -182,6 +222,37 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
                     None => view! { <span class="ingest-msg">{move || status.get()}</span> }.into_any(),
                 }}
             </div>
+
+            {move || {
+                let songs = library.get();
+                (!songs.is_empty()).then(|| {
+                    view! {
+                        <div class="ingest-library">
+                            <span class="library-label">"Library"</span>
+                            <div class="library-chips">
+                                {songs.into_iter().map(|s| {
+                                    let id = s.id.clone();
+                                    let title = if s.title.is_empty() { s.id.clone() } else { s.title.clone() };
+                                    let label = title.clone();
+                                    let icon = if s.source == "youtube" { "▶" } else { "♪" };
+                                    let meta = format!("{} chords", s.chords);
+                                    view! {
+                                        <button
+                                            class="library-chip"
+                                            title=meta
+                                            prop:disabled=move || loading.get()
+                                            on:click=move |_| load_from_library(id.clone(), title.clone())
+                                        >
+                                            <span class="chip-icon">{icon}</span>
+                                            <span class="chip-title">{label}</span>
+                                        </button>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        </div>
+                    }
+                })
+            }}
         </section>
     }
 }

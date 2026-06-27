@@ -105,3 +105,18 @@ The app detects the key, fills the timeline with the song's chords, and
 highlights the current chord on the fretboard in time with the `<audio>` player.
 The **⚙** button reveals a configurable server URL (defaults to
 `http://localhost:5002`). **✕ Clear** returns to the demo jam.
+
+### Persistent library
+
+Every analyzed song is **cached on disk** by the sidecar (under
+`server/_ingest_cache/`) keyed by a stable id — `yt_<videoId>` for YouTube,
+`file_<sha256>` for uploads — as `<id>.mp3` (audio) plus `<id>.json` (chords +
+metadata). Re-analyzing the same song returns instantly instead of
+re-downloading and re-running recognition, and the cache survives sidecar
+restarts (it is rebuilt from disk).
+
+Previously analyzed songs appear as clickable **Library** chips in the ingest
+panel; clicking one reloads that song immediately. The sidecar exposes
+`GET /api/library` (summaries) and `GET /api/song/<id>` (full cached analysis)
+for this.
+
