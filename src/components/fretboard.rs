@@ -1,7 +1,8 @@
 use leptos::prelude::*;
 
 use crate::theory::{
-    fret_marker, pitch_class, Section, FRET_MAX, FRET_MIN, NOTE_NAMES, STRINGS,
+    fret_marker, pitch_class, scale_degree_name, scale_position_span, LabelMode, Section, FRET_MAX,
+    FRET_MIN, NOTE_NAMES, STRINGS,
 };
 
 /// The guitar fretboard, drawn as a grid centered on fret 12.
@@ -11,9 +12,17 @@ use crate::theory::{
 /// transitions animate the differences cleanly instead of snapping.
 ///
 /// Layers, strongest first: chord root, chord tone, the current chord's scale,
-/// and the overall song scale (always shown).
+/// and the overall song scale (always shown). On top of those, notes outside the
+/// active scale-position box are dimmed, and notes belonging to the *next*
+/// chord get a target ring so the player can aim resolutions ahead.
 #[component]
-pub fn Fretboard(current: Memo<Section>, key_pcs: Vec<u8>) -> impl IntoView {
+pub fn Fretboard(
+    current: Memo<Section>,
+    next: Memo<Section>,
+    key_pcs: Vec<u8>,
+    label_mode: ReadSignal<LabelMode>,
+    pos_idx: ReadSignal<usize>,
+) -> impl IntoView {
     let mut cells = Vec::new();
 
     // Header row: corner + fret numbers with inlay markers (static).
@@ -59,10 +68,37 @@ pub fn Fretboard(current: Memo<Section>, key_pcs: Vec<u8>) -> impl IntoView {
                 }
             };
 
+            // Dimmed when this fret sits outside the active scale-position box.
+            let dimmed = move || {
+                let s = current.get();
+                let (start, end) = scale_position_span(s.scale_root, s.scale_type, pos_idx.get());
+                fret < start || fret > end
+            };
+
+            // Ringed when this note is a tone of the upcoming chord.
+            let targeted = move || next.get().chord_pcs().contains(&pc);
+
+            let cell_class = move || {
+                let mut c = format!("cell {}", kind());
+                if dimmed() {
+                    c.push_str(" dim");
+                }
+                if targeted() {
+                    c.push_str(" target");
+                }
+                c
+            };
+
+            // The note label switches between absolute name and scale degree.
+            let label = move || match label_mode.get() {
+                LabelMode::NoteName => name.to_string(),
+                LabelMode::Degree => scale_degree_name(pc, current.get().scale_root).to_string(),
+            };
+
             cells.push(
                 view! {
-                    <div class=move || format!("cell {}", kind())>
-                        <span class="note">{name}</span>
+                    <div class=cell_class>
+                        <span class="note">{label}</span>
                     </div>
                 }
                 .into_any(),
@@ -79,6 +115,7 @@ pub fn Fretboard(current: Memo<Section>, key_pcs: Vec<u8>) -> impl IntoView {
                 <span class="key chord"><i></i>"Chord tone"</span>
                 <span class="key scale"><i></i>"Chord scale"</span>
                 <span class="key song-note"><i></i>"Song scale"</span>
+                <span class="key target-note"><i></i>"Next chord"</span>
             </div>
         </section>
     }

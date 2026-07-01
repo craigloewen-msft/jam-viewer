@@ -10,6 +10,7 @@
   --chord: #4cc2ff;
   --scale: #46d18a;
   --accent: #7c8cff;
+  --target: #ffcf5c;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
 }
@@ -391,6 +392,43 @@ body {
   box-shadow: 0 0 22px rgba(255, 92, 122, 0.7);
 }
 
+/* Notes outside the active scale-position box fade back so the box stands out. */
+.cell.dim .note {
+  opacity: 0.16;
+  filter: saturate(0.35);
+}
+
+/* Next-chord targeting: a small amber dot centered along the bottom of the
+   note circle, marking the upcoming chord's tones. Kept compact so it hints
+   rather than shouts, but given a high z-index so neighbouring (scaled-up)
+   notes can never overlap and hide it. */
+.cell.target::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  transform: translateX(-50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--target);
+  border: 1px solid rgba(12, 16, 24, 0.55);
+  box-shadow: 0 0 6px rgba(255, 207, 92, 0.7);
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* Keep a targeted note that is otherwise hidden/faint gently visible (quiet),
+   even when dimmed by the position box — the corner dot does the signalling. */
+.cell.target.off .note,
+.cell.target.song .note,
+.cell.target.dim .note {
+  opacity: 0.45;
+  filter: none;
+  transform: scale(0.6);
+  color: var(--target);
+}
+
 /* ---------------- Legend ---------------- */
 .legend {
   display: flex;
@@ -432,6 +470,11 @@ body {
   border: 1.5px solid #454f6c;
 }
 
+.key.target-note i {
+  background: var(--target);
+  box-shadow: 0 0 6px rgba(255, 207, 92, 0.7);
+}
+
 /* ---------------- Transport ---------------- */
 .transport {
   display: flex;
@@ -469,6 +512,56 @@ body {
   background: var(--accent);
   border-color: var(--accent);
   color: #0c1018;
+}
+
+/* Names | Degrees segmented control */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.seg-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.seg-btn:hover {
+  color: var(--text);
+}
+
+.seg-btn.on {
+  background: var(--accent);
+  color: #0c1018;
+}
+
+/* Scale-position stepper */
+.pos {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-step {
+  padding: 8px 13px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.pos-label {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 62px;
+  text-align: center;
+  color: var(--text);
 }
 
 .tempo {

@@ -46,4 +46,16 @@ and the overall **song scale** (always shown) — and the notes animate cleanly
 between states as the chord changes. On the sliding timeline each chord shows its
 letter name with its **Roman numeral** in the key beneath it (e.g. in C major:
 `Am`→`vi`, `F`→`IV`, `C`→`I`, `G7`→`V7`), so you can read each chord's place in
-the scale. Real music ingestion is a future step.
+the scale.
+
+For soloing, the fretboard adds three lead-playing aids, driven from the footer:
+
+- **Names / Degrees toggle** — relabel every note between its pitch name (`C`,
+  `D#`) and its scale degree relative to the current scale root (`1`, `b3`, `5`).
+- **Scale position boxes** — a `Pos N/5` stepper highlights one CAGED-style
+  position at a time and dims notes outside it, so you can anchor a solo in one
+  shape and cycle through positions.
+- **Next-chord targeting** — a dashed, glowing ring marks where the *upcoming*
+  chord's tones live, so you can aim your resolutions ahead of the change.
+
+Real music ingestion is a future step.
