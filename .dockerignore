@@ -1,0 +1,9 @@
+# Build artifacts (rebuilt inside the container)
+/target
+
+# Persistent song cache (mounted at runtime as a volume)
+/server/_ingest_cache
+
+# VCS / editor noise
+.git
+.gitignore
