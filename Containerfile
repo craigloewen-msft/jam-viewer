@@ -34,8 +34,9 @@ COPY --from=builder /app/target/release/jam-viewer /app/jam-viewer
 COPY --from=builder /app/target/site /app/site
 
 # Leptos reads its runtime configuration from these env vars. Bind to 0.0.0.0 so
-# the server is reachable from outside the container; persist the song cache in
-# a mountable volume.
+# the server is reachable from outside the container. The song cache is written
+# to /data/cache; bind-mount a host directory there so the converted files land
+# in a folder you can access and copy to another machine.
 ENV LEPTOS_OUTPUT_NAME=jam-viewer \
     LEPTOS_SITE_ROOT=site \
     LEPTOS_SITE_PKG_DIR=pkg \
@@ -44,7 +45,6 @@ ENV LEPTOS_OUTPUT_NAME=jam-viewer \
     CHORDMINI_URL=http://localhost:5001
 
 RUN mkdir -p /data/cache
-VOLUME ["/data/cache"]
 
 EXPOSE 5002
 

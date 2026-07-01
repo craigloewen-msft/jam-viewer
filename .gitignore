@@ -2,3 +2,5 @@
 
 # persistent song cache (analyzed songs: json + audio)
 /server/_ingest_cache
+# host-mounted container cache (-v ./cache:/data/cache)
+/cache

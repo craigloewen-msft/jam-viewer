@@ -33,13 +33,14 @@ and run it with `wslc`:
 ```bash
 wslc build -f Containerfile -t jam-viewer .
 wslc run -d -p 5002:5002 --name jam-viewer \
-  -v jam-cache:/data/cache \
+  -v ./cache:/data/cache \
   jam-viewer
 ```
 
-The app is then served at http://localhost:5002. The `-v jam-cache:/data/cache`
-volume persists the analyzed-song library (`INGEST_CACHE`) across container
-restarts.
+The app is then served at http://localhost:5002. The `-v ./cache:/data/cache`
+bind mount writes the analyzed-song library (`INGEST_CACHE`) into a `cache/`
+folder next to this README, so the converted files (audio + chord JSON) land on
+the host where you can access them directly and copy them to another machine.
 
 To analyze real songs, run the [ChordMini backend](#chordmini-backend-optional-for-real-songs)
 too and point the container at it. Since ChordMini runs in its own container,
@@ -47,7 +48,7 @@ use the host address instead of `localhost`:
 
 ```bash
 wslc run -d -p 5002:5002 --name jam-viewer \
-  -v jam-cache:/data/cache \
+  -v ./cache:/data/cache \
   -e CHORDMINI_URL=http://host.docker.internal:5001 \
   jam-viewer
 ```
