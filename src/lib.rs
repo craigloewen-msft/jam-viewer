@@ -7,6 +7,10 @@
 //! codebase — no separate sidecar process. ChordMini itself stays a separate
 //! container, reached over HTTP by the server functions.
 
+// The deeply-nested `view!` trees (fretboard + timeline + transport) exceed the
+// default type-resolution recursion limit when building the hydrate/WASM lib.
+#![recursion_limit = "512"]
+
 pub mod api;
 pub mod app;
 pub mod components;
