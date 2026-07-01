@@ -3,12 +3,15 @@ name = "jam-viewer"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-leptos = { version = "0.8", features = ["csr"] }
+leptos = { version = "0.8", features = [] }
+leptos_axum = { version = "0.8", optional = true }
+server_fn = { version = "0.8", features = ["multipart"] }
 console_error_panic_hook = "0.1"
-gloo-net = { version = "0.6", features = ["http"] }
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 js-sys = "0.3"
@@ -16,14 +19,53 @@ web-sys = { version = "0.3", features = [
     "HtmlAudioElement",
     "HtmlMediaElement",
     "HtmlInputElement",
+    "HtmlFormElement",
     "File",
     "FileList",
     "Blob",
     "FormData",
+    "SubmitEvent",
     "Url",
     "Event",
     "EventTarget",
 ] }
+
+# Server-only (native) dependencies, enabled by the `ssr` feature.
+axum = { version = "0.8", optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["fs"], optional = true }
+reqwest = { version = "0.12", features = ["multipart", "json"], optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+
+[features]
+default = []
+hydrate = ["leptos/hydrate"]
+ssr = [
+    "dep:axum",
+    "dep:tokio",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:reqwest",
+    "dep:sha2",
+    "dep:hex",
+    "dep:leptos_axum",
+    "leptos/ssr",
+    "server_fn/axum",
+]
+
+[package.metadata.leptos]
+output-name = "jam-viewer"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "style.css"
+site-addr = "127.0.0.1:5002"
+reload-port = 5003
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
 
 [profile.release]
 opt-level = "z"

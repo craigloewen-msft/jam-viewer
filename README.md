@@ -1,43 +1,46 @@
 # jam-viewer
 
 A guitar practice app that visualizes the chord and scale you should play, on a
-fretboard centered at fret 12. Built with [Leptos](https://leptos.dev/) (WASM,
-client-side rendering).
+fretboard centered at fret 12. Built with [Leptos](https://leptos.dev/) as a
+**single fullstack Rust app** (server-side rendering + WASM hydration) — the UI,
+the song library, and the YouTube/file ingestion API all live in one codebase and
+run from one process. Chord recognition runs in a separate
+[ChordMini](https://github.com/ptnghia-j/ChordMiniApp) container.
 
 ## Run it
 
 ```bash
 # one-time setup
-cargo install trunk                      # build tool (or: pacman -S trunk)
-rustup target add wasm32-unknown-unknown # WASM target (or: pacman -S rust-wasm)
+cargo install cargo-leptos                # fullstack build tool
+rustup target add wasm32-unknown-unknown  # WASM target
 
-# dev server with live reload at http://127.0.0.1:8080
-trunk serve --open
+# dev server with live reload at http://127.0.0.1:5002
+cargo leptos watch
 
-# production build into ./dist
-trunk build --release
+# production build (server binary + hashed client assets under ./target)
+cargo leptos build --release
+./target/release/jam-viewer               # serves the release build
 ```
 
-## Why Trunk and not just cargo?
-
-`cargo build` produces a raw `.wasm` file but not the JavaScript glue, bundled
-CSS, or HTML needed to run it in a browser. Trunk wraps Cargo + `wasm-bindgen`
-and the asset pipeline to do all of that. (`cargo leptos` is the alternative,
-but it's for full-stack/SSR apps — this one is client-only.)
+`cargo leptos` compiles the crate twice from the same source — once natively for
+the axum server (the `ssr` feature) and once to WASM for the browser (the
+`hydrate` feature) — then bundles the JS glue, CSS, and hashed assets. There is
+no separate frontend build step and no sidecar process.
 
 ## Project layout
 
-| Path                          | Purpose                                          |
-| ----------------------------- | ------------------------------------------------ |
-| `index.html`                  | Trunk entry point                                |
-| `style.css`                   | App styling                                      |
-| `src/main.rs`                 | Mounts the app                                   |
-| `src/app.rs`                  | Root component, ingest panel, demo + song player |
-| `src/theory.rs`               | Notes, chords, scales, fretboard math, demo song |
-| `src/ingest.rs`               | Song ingestion (file / YouTube) + chord parsing  |
-| `src/components/timeline.rs`  | Sliding chord timeline (also the header)         |
-| `src/components/fretboard.rs` | Fretboard visualization                          |
-| `server/ingest_server.py`     | Ingest sidecar (yt-dlp + ChordMini proxy)        |
+| Path                          | Purpose                                            |
+| ----------------------------- | -------------------------------------------------- |
+| `style.css`                   | App styling (served by cargo-leptos)               |
+| `src/lib.rs`                  | Crate root: modules, HTML shell, hydrate entry     |
+| `src/main.rs`                 | axum server: Leptos routes + `/api/audio/{id}`     |
+| `src/app.rs`                  | Root component, ingest panel, demo + song player   |
+| `src/api.rs`                  | `#[server]` functions (library / ingest API)       |
+| `src/server/ingest.rs`        | Server-side ingest: yt-dlp, ChordMini proxy, cache |
+| `src/ingest.rs`               | Shared ingest types + chord parsing                |
+| `src/theory.rs`               | Notes, chords, scales, fretboard math, demo song   |
+| `src/components/timeline.rs`  | Sliding chord timeline (also the header)           |
+| `src/components/fretboard.rs` | Fretboard visualization                            |
 
 The app has two modes:
 
@@ -74,11 +77,12 @@ For soloing, the fretboard adds three lead-playing aids, driven from the transpo
 ## Ingesting real songs
 
 Chord recognition runs on a self-hosted [ChordMini](https://github.com/ptnghia-j/ChordMiniApp)
-backend (madmom for beats + Chord-CNN-LSTM for chords). A small Flask **sidecar**
-(`server/ingest_server.py`) is the browser-facing entry point: it proxies audio
-to ChordMini for analysis and, for YouTube URLs, downloads the audio with
-`yt-dlp` and serves it back for playback. (The browser talks only to the sidecar
-because the ChordMini container does not emit CORS headers.)
+backend (madmom for beats + Chord-CNN-LSTM for chords) in its own container. The
+jam-viewer server does everything else itself: for YouTube URLs it downloads the
+audio with `yt-dlp` (needs `ffmpeg` on `PATH`), forwards audio to ChordMini for
+analysis, caches the result, and serves the audio back for playback — all over
+same-origin `#[server]` functions and the `/api/audio/{id}` route, so no CORS or
+extra process is involved.
 
 ### 1. Run the ChordMini backend container
 
@@ -95,37 +99,32 @@ docker run -d -p 5001:8080 --name chordmini chordmini-backend
 # health check: curl http://localhost:5001/api/model-info
 ```
 
-### 2. Run the ingest sidecar
+The jam-viewer server reads the ChordMini base URL from the `CHORDMINI_URL`
+environment variable (default `http://localhost:5001`).
+
+### 2. Run jam-viewer and use it
 
 ```bash
-cd server
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt          # flask, flask-cors, requests, yt-dlp
-# (yt-dlp also needs ffmpeg on PATH)
-CHORDMINI_URL=http://localhost:5001 python ingest_server.py   # listens on :5002
+CHORDMINI_URL=http://localhost:5001 cargo leptos watch   # serves on :5002
 ```
 
-Or start it via `server/start.sh`.
-
-### 3. Use it
-
-Run `trunk serve`, then in the app's **ingest panel**: choose an audio file and
-click **Analyze file**, or paste a **YouTube URL** and click **Analyze YouTube**.
-The app detects the key, fills the timeline with the song's chords, and
-highlights the current chord on the fretboard in time with the `<audio>` player.
-The **⚙** button reveals a configurable server URL (defaults to
-`http://localhost:5002`). **✕ Clear** returns to the demo jam.
+In the app's **ingest panel**: choose an audio file and click **Analyze file**,
+or paste a **YouTube URL** and click **Analyze YouTube**. The app detects the
+key, fills the timeline with the song's chords, and highlights the current chord
+on the fretboard in time with the `<audio>` player. **✕ Clear** returns to the
+demo jam.
 
 ### Persistent library
 
-Every analyzed song is **cached on disk** by the sidecar (under
-`server/_ingest_cache/`) keyed by a stable id — `yt_<videoId>` for YouTube,
-`file_<sha256>` for uploads — as `<id>.mp3` (audio) plus `<id>.json` (chords +
-metadata). Re-analyzing the same song returns instantly instead of
-re-downloading and re-running recognition, and the cache survives sidecar
-restarts (it is rebuilt from disk).
+Every analyzed song is **cached on disk** (under `server/_ingest_cache/`, override
+with the `INGEST_CACHE` env var) keyed by a stable id — `yt_<videoId>` for
+YouTube, `file_<sha256>` for uploads — as `<id>.<ext>` (audio) plus `<id>.json`
+(chords + metadata). Re-analyzing the same song returns instantly instead of
+re-downloading and re-running recognition, and the cache survives restarts (it is
+rebuilt from disk).
 
-Previously analyzed songs appear as clickable **Library** chips in the ingest
-panel; clicking one reloads that song immediately. The sidecar exposes
-`GET /api/library` (summaries) and `GET /api/song/<id>` (full cached analysis)
-for this.
+Previously analyzed songs appear in a **Library** panel in the ingest panel. The
+panel is **collapsed by default**; expand it to reveal a **search box** (filter
+saved songs by title) and clickable chips — clicking a chip reloads that song
+immediately. The library is backed by the `get_library` and `load_song`
+`#[server]` functions.

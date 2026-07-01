@@ -3,14 +3,12 @@ use leptos::task::spawn_local;
 use std::cmp::Ordering;
 use std::time::Duration;
 
-use web_sys::{HtmlInputElement, Url};
+use web_sys::{FormData, HtmlInputElement};
 
+use crate::api::{get_library, ingest_file, ingest_youtube, load_song};
 use crate::components::fretboard::Fretboard;
 use crate::components::timeline::Timeline;
-use crate::ingest::{
-    fetch_library, ingest_youtube, load_song, recognize_file, IngestResult, LibraryEntry,
-    DEFAULT_SIDECAR_URL,
-};
+use crate::ingest::{IngestResult, LibraryEntry};
 use crate::theory::{
     demo_song, locate, section_ordinal, LabelMode, Section, NOTE_NAMES, POSITION_COUNT,
 };
@@ -37,24 +35,34 @@ pub fn App() -> impl IntoView {
 /// [`IngestResult`] into `ingested`, which swaps the view to the song player.
 #[component]
 fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
-    let server_url = RwSignal::new(DEFAULT_SIDECAR_URL.to_string());
     let youtube_url = RwSignal::new(String::new());
     let loading = RwSignal::new(false);
     let status = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
-    let show_advanced = RwSignal::new(false);
-    // Previously analyzed songs from the sidecar's persistent cache.
+    // Previously analyzed songs from the persistent cache (server-side).
     let library = RwSignal::new(Vec::<LibraryEntry>::new());
+    // Whether a library reload is in flight, and the last reload error (if any),
+    // so the Library panel can show feedback instead of silently staying empty.
+    let library_loading = RwSignal::new(false);
+    let library_error = RwSignal::new(None::<String>);
+    // Library panel is collapsed by default; `library_query` filters the chips.
+    let library_open = RwSignal::new(false);
+    let library_query = RwSignal::new(String::new());
 
     let file_ref = NodeRef::<leptos::html::Input>::new();
 
-    // Reload the library listing from the sidecar.
+    // Reload the library listing via the `get_library` server function.
     let refresh_library = move || {
-        let backend = server_url.get_untracked();
+        library_loading.set(true);
         spawn_local(async move {
-            if let Ok(songs) = fetch_library(&backend).await {
-                library.set(songs);
+            match get_library().await {
+                Ok(songs) => {
+                    library.set(songs);
+                    library_error.set(None);
+                }
+                Err(e) => library_error.set(Some(e.to_string())),
             }
+            library_loading.set(false);
         });
     };
     // Populate the library on first render.
@@ -62,8 +70,8 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
         refresh_library();
     });
 
-    // Analyze an uploaded file: POST straight to the ChordMini container and
-    // play it back from a browser object URL.
+    // Analyze an uploaded file via the `ingest_file` server function. The file
+    // is streamed to the server as multipart form data, cached, and analyzed.
     let analyze_file = move |_| {
         error.set(None);
         let Some(input) = file_ref.get() else { return };
@@ -76,30 +84,27 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
             error.set(Some("Choose an audio file first.".into()));
             return;
         };
-        let object_url = match Url::create_object_url_with_blob(&file) {
-            Ok(u) => u,
-            Err(_) => {
-                error.set(Some("Could not create a playback URL for this file.".into()));
-                return;
-            }
-        };
-        let backend = server_url.get();
+        let form = FormData::new().unwrap();
+        if form.append_with_blob("file", &file).is_err() {
+            error.set(Some("Could not attach the selected file.".into()));
+            return;
+        }
         loading.set(true);
         status.set("Analyzing audio… (this can take a moment)".into());
         spawn_local(async move {
-            match recognize_file(&backend, &file, object_url).await {
+            match ingest_file(form.into()).await {
                 Ok(result) => {
                     status.set(format!("Loaded {} chords.", result.chords.len()));
                     ingested.set(Some(result));
                     refresh_library();
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             loading.set(false);
         });
     };
 
-    // Analyze a YouTube URL via the sidecar.
+    // Analyze a YouTube URL via the `ingest_youtube` server function.
     let analyze_youtube = move |_| {
         error.set(None);
         let url = youtube_url.get();
@@ -107,36 +112,33 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
             error.set(Some("Paste a YouTube URL first.".into()));
             return;
         }
-        let sidecar = server_url.get();
         loading.set(true);
         status.set("Downloading & analyzing from YouTube… (this can take a minute)".into());
         spawn_local(async move {
-            match ingest_youtube(&sidecar, &url).await {
+            match ingest_youtube(url).await {
                 Ok(result) => {
                     status.set(format!("Loaded {} chords.", result.chords.len()));
                     ingested.set(Some(result));
                     refresh_library();
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             loading.set(false);
         });
     };
 
-    // Load a previously analyzed song from the library cache (instant — no
-    // re-download or re-analysis).
+    // Load a previously analyzed song from the cache (instant — no re-analysis).
     let load_from_library = move |id: String, title: String| {
         error.set(None);
-        let backend = server_url.get();
         loading.set(true);
         status.set(format!("Loading “{title}” from library…"));
         spawn_local(async move {
-            match load_song(&backend, &id).await {
+            match load_song(id).await {
                 Ok(result) => {
                     status.set(format!("Loaded {} chords.", result.chords.len()));
                     ingested.set(Some(result));
                 }
-                Err(e) => error.set(Some(e)),
+                Err(e) => error.set(Some(e.to_string())),
             }
             loading.set(false);
         });
@@ -146,6 +148,20 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
         ingested.set(None);
         status.set(String::new());
         error.set(None);
+    };
+
+    // Songs filtered by the (case-insensitive) search box.
+    let filtered = move || {
+        let q = library_query.get().to_lowercase();
+        library
+            .get()
+            .into_iter()
+            .filter(|s| {
+                q.is_empty()
+                    || s.title.to_lowercase().contains(&q)
+                    || s.id.to_lowercase().contains(&q)
+            })
+            .collect::<Vec<_>>()
     };
 
     view! {
@@ -191,31 +207,11 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
                 </div>
 
                 <div class="ingest-group">
-                    <button
-                        class="btn ghost"
-                        on:click=move |_| show_advanced.update(|v| *v = !*v)
-                    >
-                        "⚙"
-                    </button>
                     {move || ingested.get().is_some().then(|| view! {
                         <button class="btn" on:click=clear>"✕ Clear"</button>
                     })}
                 </div>
             </div>
-
-            {move || show_advanced.get().then(|| view! {
-                <div class="ingest-row advanced">
-                    <div class="ingest-group grow">
-                        <label class="ingest-label">"Server URL"</label>
-                        <input
-                            class="ingest-url"
-                            type="text"
-                            prop:value=move || server_url.get()
-                            on:input=move |ev| server_url.set(event_target_value(&ev))
-                        />
-                    </div>
-                </div>
-            })}
 
             <div class="ingest-status">
                 {move || loading.get().then(|| view! { <span class="spinner"></span> })}
@@ -225,36 +221,90 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
                 }}
             </div>
 
-            {move || {
-                let songs = library.get();
-                (!songs.is_empty()).then(|| {
-                    view! {
-                        <div class="ingest-library">
-                            <span class="library-label">"Library"</span>
-                            <div class="library-chips">
-                                {songs.into_iter().map(|s| {
-                                    let id = s.id.clone();
-                                    let title = if s.title.is_empty() { s.id.clone() } else { s.title.clone() };
-                                    let label = title.clone();
-                                    let icon = if s.source == "youtube" { "▶" } else { "♪" };
-                                    let meta = format!("{} chords", s.chords);
-                                    view! {
-                                        <button
-                                            class="library-chip"
-                                            title=meta
-                                            prop:disabled=move || loading.get()
-                                            on:click=move |_| load_from_library(id.clone(), title.clone())
-                                        >
-                                            <span class="chip-icon">{icon}</span>
-                                            <span class="chip-title">{label}</span>
-                                        </button>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
-                    }
-                })
-            }}
+            <div class="ingest-library" class:open=move || library_open.get()>
+                <div class="library-head">
+                    <button
+                        class="library-toggle"
+                        aria-expanded=move || library_open.get().to_string()
+                        on:click=move |_| library_open.update(|o| *o = !*o)
+                    >
+                        <span class="library-caret">
+                            {move || if library_open.get() { "▾" } else { "▸" }}
+                        </span>
+                        <span class="library-label">"Library"</span>
+                        <span class="library-count">
+                            {move || format!("({})", library.get().len())}
+                        </span>
+                    </button>
+                    {move || library_open.get().then(|| view! {
+                        <button
+                            class="btn ghost library-refresh"
+                            title="Reload saved songs"
+                            prop:disabled=move || library_loading.get()
+                            on:click=move |_| refresh_library()
+                        >
+                            {move || if library_loading.get() { "Refreshing…" } else { "↻ Refresh" }}
+                        </button>
+                    })}
+                </div>
+
+                {move || library_open.get().then(|| view! {
+                    <div class="library-body">
+                        <input
+                            class="library-search"
+                            type="search"
+                            placeholder="Search saved songs…"
+                            prop:value=move || library_query.get()
+                            on:input=move |ev| library_query.set(event_target_value(&ev))
+                        />
+                        {move || {
+                            let songs = filtered();
+                            if !songs.is_empty() {
+                                view! {
+                                    <div class="library-chips">
+                                        {songs.into_iter().map(|s| {
+                                            let id = s.id.clone();
+                                            let title = if s.title.is_empty() { s.id.clone() } else { s.title.clone() };
+                                            let label = title.clone();
+                                            let icon = if s.source == "youtube" { "▶" } else { "♪" };
+                                            let mins = (s.duration / 60.0) as u32;
+                                            let secs = (s.duration % 60.0) as u32;
+                                            let tip = format!("{} chords · {}:{:02}", s.chords, mins, secs);
+                                            view! {
+                                                <button
+                                                    class="library-chip"
+                                                    title=tip
+                                                    prop:disabled=move || loading.get()
+                                                    on:click=move |_| load_from_library(id.clone(), title.clone())
+                                                >
+                                                    <span class="chip-icon">{icon}</span>
+                                                    <span class="chip-title">{label}</span>
+                                                </button>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                }.into_any()
+                            } else if let Some(err) = library_error.get() {
+                                view! {
+                                    <span class="library-empty error">
+                                        {format!("Couldn't load the library: {err}")}
+                                    </span>
+                                }.into_any()
+                            } else if library_loading.get() {
+                                view! { <span class="library-empty">"Loading saved songs…"</span> }.into_any()
+                            } else if !library_query.get().is_empty() {
+                                view! { <span class="library-empty">"No songs match your search."</span> }.into_any()
+                            } else {
+                                view! {
+                                    <span class="library-empty">
+                                        "No saved songs yet — analyze a file or YouTube URL and it will be saved here for instant reloading."
+                                    </span>
+                                }.into_any()
+                            }
+                        }}
+                    </div>
+                })}
+            </div>
         </section>
     }
 }

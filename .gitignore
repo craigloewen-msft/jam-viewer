@@ -1,7 +1,4 @@
 /target
-/dist
 
-# ingest sidecar
-/server/.venv
+# persistent song cache (analyzed songs: json + audio)
 /server/_ingest_cache
-__pycache__/

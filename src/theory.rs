@@ -1,6 +1,8 @@
 //! Music-theory primitives: notes, chords, scales, fretboard geometry and a
 //! small demo song used to drive the UI.
 
+use serde::{Deserialize, Serialize};
+
 /// Names for the 12 pitch classes, using sharps.
 pub const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -55,7 +57,7 @@ pub struct GuitarString {
 }
 
 /// Quality of a chord, expressed as semitone offsets from the root.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChordQuality {
     Major,
     Minor,
@@ -89,7 +91,7 @@ impl ChordQuality {
 }
 
 /// A scale type, expressed as semitone offsets from its root.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScaleType {
     Major,
     NaturalMinor,
@@ -307,7 +309,7 @@ pub fn parse_chord_label(label: &str) -> Option<(u8, ChordQuality)> {
 
 /// A chord placed on the audio timeline, in seconds. Produced by ingesting a
 /// real song; consumed by the player to drive the highlighted `current` chord.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimedChord {
     pub chord_root: u8,
     pub chord_quality: ChordQuality,
