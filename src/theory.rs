@@ -6,6 +6,29 @@ pub const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
+/// A note's place within a scale, named by its chromatic scale degree relative
+/// to the root (root = `1`). E.g. a minor-pentatonic run reads `1 b3 4 5 b7`,
+/// a major scale reads `1 2 3 4 5 6 7`. Arabic numerals are the convention for
+/// individual scale tones (Roman numerals are reserved for chords).
+pub const DEGREE_NAMES: [&str; 12] = [
+    "1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7",
+];
+
+/// Scale-degree label for pitch class `pc` measured from `root`.
+pub fn scale_degree_name(pc: u8, root: u8) -> &'static str {
+    let offset = (pc + 12 - root % 12) % 12;
+    DEGREE_NAMES[offset as usize]
+}
+
+/// How the fretboard labels each note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LabelMode {
+    /// Absolute pitch name, e.g. "C", "D#".
+    NoteName,
+    /// Scale degree relative to the current scale root, e.g. "1", "b3".
+    Degree,
+}
+
 /// Roman numerals for the seven scale degrees.
 const ROMAN_NUMERALS: [&str; 7] = ["I", "II", "III", "IV", "V", "VI", "VII"];
 
@@ -312,6 +335,42 @@ impl TimedChord {
             beats,
         }
     }
+}
+
+/// Number of scale "position" boxes the player can cycle through.
+pub const POSITION_COUNT: usize = 5;
+
+/// Width (in frets) of one scale-position box.
+const POSITION_SPAN: u8 = 4;
+
+/// Fret window `(start, end)` of the `index`-th scale-position box for a scale
+/// rooted at `scale_root`.
+///
+/// Boxes are anchored to the scale tones that fall on the low‑E string within
+/// the visible neck: position 0 starts at the lowest such anchor, each
+/// subsequent position at the next anchor up. The span is `POSITION_SPAN` frets
+/// wide, clamped to the visible window `[FRET_MIN, FRET_MAX]`. This approximates
+/// the standard CAGED boxes inside the fixed fret window.
+pub fn scale_position_span(scale_root: u8, scale_type: ScaleType, index: usize) -> (u8, u8) {
+    let scale_pcs: Vec<u8> = scale_type
+        .intervals()
+        .iter()
+        .map(|i| (scale_root + i) % 12)
+        .collect();
+
+    // Frets on the low‑E string (open pc 4) that land on a scale tone.
+    let anchors: Vec<u8> = (FRET_MIN..=FRET_MAX)
+        .filter(|&f| scale_pcs.contains(&pitch_class(4, f)))
+        .collect();
+
+    if anchors.is_empty() {
+        return (FRET_MIN, FRET_MAX);
+    }
+
+    let i = index.min(anchors.len() - 1);
+    let start = anchors[i];
+    let end = (start + POSITION_SPAN).min(FRET_MAX);
+    (start, end)
 }
 
 /// Number of inlay dots drawn on a fret marker (0 = none, 1 = single, 2 = double).

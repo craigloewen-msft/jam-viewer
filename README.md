@@ -61,6 +61,16 @@ with connecting boundary boxes. The fret window (currently frets 7–17) is driv
 entirely by the `FRET_MIN`/`FRET_MAX` constants in `src/theory.rs`, so it — and
 the CAGED overlay — can be retuned by editing only those two values.
 
+For soloing, the fretboard adds three lead-playing aids, driven from the transport bar:
+
+- **Names / Degrees toggle** — relabel every note between its pitch name (`C`,
+  `D#`) and its scale degree relative to the current scale root (`1`, `b3`, `5`).
+- **Scale position boxes** — a `Pos N/5` stepper highlights one CAGED-style
+  position at a time and dims notes outside it, so you can anchor a solo in one
+  shape and cycle through positions.
+- **Next-chord targeting** — an amber dot marks where the *upcoming* chord's
+  tones live, so you can aim your resolutions ahead of the change.
+
 ## Ingesting real songs
 
 Chord recognition runs on a self-hosted [ChordMini](https://github.com/ptnghia-j/ChordMiniApp)
@@ -119,4 +129,3 @@ Previously analyzed songs appear as clickable **Library** chips in the ingest
 panel; clicking one reloads that song immediately. The sidecar exposes
 `GET /api/library` (summaries) and `GET /api/song/<id>` (full cached analysis)
 for this.
-
