@@ -67,6 +67,41 @@ pub enum ChordQuality {
 }
 
 impl ChordQuality {
+    /// Every quality, in the order shown in the song editor's dropdown.
+    pub const ALL: [ChordQuality; 5] = [
+        ChordQuality::Major,
+        ChordQuality::Minor,
+        ChordQuality::Dominant7,
+        ChordQuality::Major7,
+        ChordQuality::Minor7,
+    ];
+
+    /// Human-readable name for editor dropdowns, e.g. "Dominant 7".
+    pub fn name(self) -> &'static str {
+        match self {
+            ChordQuality::Major => "Major",
+            ChordQuality::Minor => "Minor",
+            ChordQuality::Dominant7 => "Dominant 7",
+            ChordQuality::Major7 => "Major 7",
+            ChordQuality::Minor7 => "Minor 7",
+        }
+    }
+
+    /// Resolve an index into [`ChordQuality::ALL`] back to a quality.
+    pub fn from_index(i: usize) -> Option<ChordQuality> {
+        ChordQuality::ALL.get(i).copied()
+    }
+
+    /// A sensible scale to solo over this chord, used when a chord is created
+    /// or edited so the fretboard always has a matching scale to show.
+    pub fn solo_scale(self) -> ScaleType {
+        match self {
+            ChordQuality::Minor | ChordQuality::Minor7 => ScaleType::MinorPentatonic,
+            ChordQuality::Dominant7 => ScaleType::Mixolydian,
+            ChordQuality::Major | ChordQuality::Major7 => ScaleType::MajorPentatonic,
+        }
+    }
+
     /// Semitone intervals from the root that make up the chord.
     pub fn intervals(self) -> &'static [u8] {
         match self {
@@ -101,6 +136,20 @@ pub enum ScaleType {
 }
 
 impl ScaleType {
+    /// Every scale type, in the order shown in the song editor's dropdown.
+    pub const ALL: [ScaleType; 5] = [
+        ScaleType::Major,
+        ScaleType::NaturalMinor,
+        ScaleType::MinorPentatonic,
+        ScaleType::MajorPentatonic,
+        ScaleType::Mixolydian,
+    ];
+
+    /// Resolve an index into [`ScaleType::ALL`] back to a scale type.
+    pub fn from_index(i: usize) -> Option<ScaleType> {
+        ScaleType::ALL.get(i).copied()
+    }
+
     pub fn intervals(self) -> &'static [u8] {
         match self {
             ScaleType::Major => &[0, 2, 4, 5, 7, 9, 11],
@@ -323,11 +372,7 @@ impl TimedChord {
     /// Convert to a [`Section`], picking a sensible solo scale for the chord and
     /// quantizing its duration to whole "beats" (seconds) for the timeline.
     pub fn to_section(&self) -> Section {
-        let scale_type = match self.chord_quality {
-            ChordQuality::Minor | ChordQuality::Minor7 => ScaleType::MinorPentatonic,
-            ChordQuality::Dominant7 => ScaleType::Mixolydian,
-            _ => ScaleType::MajorPentatonic,
-        };
+        let scale_type = self.chord_quality.solo_scale();
         let beats = (self.end - self.start).round().max(1.0) as usize;
         Section {
             chord_root: self.chord_root,

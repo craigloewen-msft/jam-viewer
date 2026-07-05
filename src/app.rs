@@ -10,7 +10,8 @@ use crate::components::fretboard::Fretboard;
 use crate::components::timeline::Timeline;
 use crate::ingest::{IngestResult, LibraryEntry};
 use crate::theory::{
-    demo_song, locate, section_ordinal, LabelMode, Section, NOTE_NAMES, POSITION_COUNT,
+    demo_song, locate, section_ordinal, ChordQuality, LabelMode, ScaleType, Section, Song,
+    NOTE_NAMES, POSITION_COUNT,
 };
 
 /// Root component: an ingestion panel on top, and below it either the built-in
@@ -312,11 +313,10 @@ fn IngestPanel(ingested: RwSignal<Option<IngestResult>>) -> impl IntoView {
 /// The built-in looping demo jam driven by a beat clock (the original behavior).
 #[component]
 fn DemoPlayer() -> impl IntoView {
-    let song = StoredValue::new(demo_song());
-    let key_name = song.with_value(|s| s.key_name());
-    let key_root = song.with_value(|s| s.key_root);
-    let key_pcs = song.with_value(|s| s.key_pcs());
-    let sections = song.with_value(|s| s.sections.clone());
+    // The song is editable via the SongEditor below, so it lives in a reactive
+    // signal; the timeline + fretboard rebuild whenever a chord is added,
+    // removed, or edited.
+    let song = RwSignal::new(demo_song());
 
     let (playing, set_playing) = signal(true);
     let (bpm, set_bpm) = signal(100u32);
@@ -346,15 +346,19 @@ fn DemoPlayer() -> impl IntoView {
         .ok()
     });
 
-    let position = Memo::new(move |_| song.with_value(|s| locate(&s.sections, total.get())));
+    let position = Memo::new(move |_| song.with(|s| locate(&s.sections, total.get())));
     let section_idx = Memo::new(move |_| position.get().0);
     let beat_in = Memo::new(move |_| position.get().1);
-    let ordinal = Memo::new(move |_| song.with_value(|s| section_ordinal(&s.sections, total.get())));
-    let current: Memo<Section> =
-        Memo::new(move |_| song.with_value(|s| s.sections[section_idx.get()]));
+    let ordinal = Memo::new(move |_| song.with(|s| section_ordinal(&s.sections, total.get())));
+    let current: Memo<Section> = Memo::new(move |_| {
+        song.with(|s| {
+            let i = section_idx.get().min(s.sections.len().saturating_sub(1));
+            s.sections[i]
+        })
+    });
     // The chord coming up next, for fretboard targeting rings.
     let next: Memo<Section> = Memo::new(move |_| {
-        song.with_value(|s| {
+        song.with(|s| {
             let len = s.sections.len().max(1);
             s.sections[(section_idx.get() + 1) % len]
         })
@@ -368,24 +372,32 @@ fn DemoPlayer() -> impl IntoView {
     let next_pos = move |_| set_pos_idx.update(|p| *p = (*p + 1) % POSITION_COUNT);
 
     view! {
-        <Timeline
-            sections=sections
-            ordinal=ordinal
-            beat_in=beat_in
-            key_name=key_name
-            key_root=key_root
-        />
+        {move || song.with(|s| {
+            let sections = s.sections.clone();
+            let key_name = s.key_name();
+            let key_root = s.key_root;
+            let key_pcs = s.key_pcs();
+            view! {
+                <Timeline
+                    sections=sections
+                    ordinal=ordinal
+                    beat_in=beat_in
+                    key_name=key_name
+                    key_root=key_root
+                />
 
-        <main class="stage">
-            <Fretboard
-                current=current
-                next=next
-                key_pcs=key_pcs
-                caged=caged
-                label_mode=label_mode
-                pos_idx=pos_idx
-            />
-        </main>
+                <main class="stage">
+                    <Fretboard
+                        current=current
+                        next=next
+                        key_pcs=key_pcs
+                        caged=caged
+                        label_mode=label_mode
+                        pos_idx=pos_idx
+                    />
+                </main>
+            }
+        })}
 
         <footer class="transport">
             <button class="btn play" on:click=toggle_play>
@@ -439,6 +451,224 @@ fn DemoPlayer() -> impl IntoView {
                 <span class="bpm">{move || format!("{} BPM", bpm.get())}</span>
             </div>
         </footer>
+
+        <SongEditor song=song/>
+    }
+}
+
+/// An inline editor for the demo song: add, remove, reorder and retune chords
+/// (root, quality, solo scale and duration in beats) plus the song's key. Every
+/// change writes back into the shared `song` signal, which live-updates the
+/// timeline and fretboard above.
+#[component]
+fn SongEditor(song: RwSignal<Song>) -> impl IntoView {
+    let open = RwSignal::new(false);
+
+    // Longest chord we allow, in beats, so the timeline stays sane.
+    const MAX_BEATS: usize = 16;
+
+    // Append a fresh C-major chord to the end of the progression.
+    let add_chord = move |_| {
+        song.update(|s| {
+            s.sections.push(Section {
+                chord_root: 0,
+                chord_quality: ChordQuality::Major,
+                scale_root: 0,
+                scale_type: ChordQuality::Major.solo_scale(),
+                beats: 4,
+            });
+        });
+    };
+
+    // Restore the built-in demo progression.
+    let reset = move |_| song.set(demo_song());
+
+    view! {
+        <section class="editor" class:open=move || open.get()>
+            <div class="editor-head">
+                <button
+                    class="editor-toggle"
+                    aria-expanded=move || open.get().to_string()
+                    on:click=move |_| open.update(|o| *o = !*o)
+                >
+                    <span class="editor-caret">
+                        {move || if open.get() { "▾" } else { "▸" }}
+                    </span>
+                    <span class="editor-label">"✎ Edit song"</span>
+                    <span class="editor-count">
+                        {move || song.with(|s| format!("({} chords)", s.sections.len()))}
+                    </span>
+                </button>
+            </div>
+
+            {move || open.get().then(|| view! {
+                <div class="editor-body">
+                    <div class="editor-key">
+                        <span class="editor-key-label">"Key"</span>
+                        <select
+                            class="ed-sel"
+                            prop:value=move || song.with(|s| s.key_root.to_string())
+                            on:change=move |ev| {
+                                if let Ok(v) = event_target_value(&ev).parse::<u8>() {
+                                    song.update(|s| s.key_root = v % 12);
+                                }
+                            }
+                        >
+                            {NOTE_NAMES.iter().enumerate().map(|(pc, name)| view! {
+                                <option value=pc.to_string()>{*name}</option>
+                            }).collect_view()}
+                        </select>
+                        <select
+                            class="ed-sel"
+                            prop:value=move || song.with(|s| {
+                                ScaleType::ALL.iter().position(|&t| t == s.key_scale).unwrap_or(0).to_string()
+                            })
+                            on:change=move |ev| {
+                                if let Ok(i) = event_target_value(&ev).parse::<usize>() {
+                                    if let Some(t) = ScaleType::from_index(i) {
+                                        song.update(|s| s.key_scale = t);
+                                    }
+                                }
+                            }
+                        >
+                            {ScaleType::ALL.iter().enumerate().map(|(i, t)| view! {
+                                <option value=i.to_string()>{t.label()}</option>
+                            }).collect_view()}
+                        </select>
+                    </div>
+
+                    <div class="editor-rows">
+                        {move || song.with(|s| {
+                            let len = s.sections.len();
+                            s.sections.iter().enumerate().map(|(i, sec)| {
+                                let root = sec.chord_root;
+                                let quality_idx = ChordQuality::ALL.iter()
+                                    .position(|&q| q == sec.chord_quality).unwrap_or(0);
+                                let scale_idx = ScaleType::ALL.iter()
+                                    .position(|&t| t == sec.scale_type).unwrap_or(0);
+                                let beats = sec.beats;
+
+                                view! {
+                                    <div class="ed-row">
+                                        <span class="ed-index">{format!("{}", i + 1)}</span>
+
+                                        <select
+                                            class="ed-sel"
+                                            title="Chord root"
+                                            prop:value=root.to_string()
+                                            on:change=move |ev| {
+                                                if let Ok(v) = event_target_value(&ev).parse::<u8>() {
+                                                    song.update(|s| if let Some(x) = s.sections.get_mut(i) {
+                                                        x.chord_root = v % 12;
+                                                        x.scale_root = v % 12;
+                                                    });
+                                                }
+                                            }
+                                        >
+                                            {NOTE_NAMES.iter().enumerate().map(|(pc, name)| view! {
+                                                <option value=pc.to_string()>{*name}</option>
+                                            }).collect_view()}
+                                        </select>
+
+                                        <select
+                                            class="ed-sel grow"
+                                            title="Chord quality"
+                                            prop:value=quality_idx.to_string()
+                                            on:change=move |ev| {
+                                                if let Ok(qi) = event_target_value(&ev).parse::<usize>() {
+                                                    if let Some(q) = ChordQuality::from_index(qi) {
+                                                        song.update(|s| if let Some(x) = s.sections.get_mut(i) {
+                                                            x.chord_quality = q;
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        >
+                                            {ChordQuality::ALL.iter().enumerate().map(|(qi, q)| view! {
+                                                <option value=qi.to_string()>{q.name()}</option>
+                                            }).collect_view()}
+                                        </select>
+
+                                        <select
+                                            class="ed-sel grow"
+                                            title="Scale to solo over this chord"
+                                            prop:value=scale_idx.to_string()
+                                            on:change=move |ev| {
+                                                if let Ok(si) = event_target_value(&ev).parse::<usize>() {
+                                                    if let Some(t) = ScaleType::from_index(si) {
+                                                        song.update(|s| if let Some(x) = s.sections.get_mut(i) {
+                                                            x.scale_type = t;
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        >
+                                            {ScaleType::ALL.iter().enumerate().map(|(si, t)| view! {
+                                                <option value=si.to_string()>{t.label()}</option>
+                                            }).collect_view()}
+                                        </select>
+
+                                        <div class="ed-beats" title="Duration in beats">
+                                            <button
+                                                class="ed-step"
+                                                aria-label="Fewer beats"
+                                                on:click=move |_| song.update(|s| {
+                                                    if let Some(x) = s.sections.get_mut(i) {
+                                                        if x.beats > 1 { x.beats -= 1; }
+                                                    }
+                                                })
+                                            >"−"</button>
+                                            <span class="ed-beats-val">{format!("{} beats", beats)}</span>
+                                            <button
+                                                class="ed-step"
+                                                aria-label="More beats"
+                                                on:click=move |_| song.update(|s| {
+                                                    if let Some(x) = s.sections.get_mut(i) {
+                                                        if x.beats < MAX_BEATS { x.beats += 1; }
+                                                    }
+                                                })
+                                            >"+"</button>
+                                        </div>
+
+                                        <div class="ed-actions">
+                                            <button
+                                                class="ed-icon"
+                                                aria-label="Move up"
+                                                prop:disabled=i == 0
+                                                on:click=move |_| song.update(|s| {
+                                                    if i > 0 { s.sections.swap(i - 1, i); }
+                                                })
+                                            >"↑"</button>
+                                            <button
+                                                class="ed-icon"
+                                                aria-label="Move down"
+                                                prop:disabled=i + 1 >= len
+                                                on:click=move |_| song.update(|s| {
+                                                    if i + 1 < s.sections.len() { s.sections.swap(i, i + 1); }
+                                                })
+                                            >"↓"</button>
+                                            <button
+                                                class="ed-icon danger"
+                                                aria-label="Remove chord"
+                                                prop:disabled=len <= 1
+                                                on:click=move |_| song.update(|s| {
+                                                    if s.sections.len() > 1 { s.sections.remove(i); }
+                                                })
+                                            >"✕"</button>
+                                        </div>
+                                    </div>
+                                }
+                            }).collect_view()
+                        })}
+                    </div>
+
+                    <div class="editor-foot">
+                        <button class="btn" on:click=add_chord>"＋ Add chord"</button>
+                        <button class="btn ghost" on:click=reset>"↺ Reset to demo"</button>
+                    </div>
+                </div>
+            })}
+        </section>
     }
 }
 

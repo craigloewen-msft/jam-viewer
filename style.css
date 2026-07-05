@@ -1103,3 +1103,196 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---------------- Song editor ---------------- */
+.editor {
+  margin-top: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 18px;
+  box-shadow: var(--shadow);
+}
+
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.editor-toggle:hover {
+  color: var(--text);
+}
+
+.editor-caret {
+  font-size: 11px;
+  width: 12px;
+}
+
+.editor-label {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.editor-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.editor-key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-key-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.editor-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ed-index {
+  width: 22px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ed-sel {
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ed-sel.grow {
+  flex: 1 1 130px;
+  min-width: 120px;
+}
+
+.ed-sel:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ed-beats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 6px;
+}
+
+.ed-beats-val {
+  min-width: 58px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-step {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ed-step:hover {
+  background: #2c3753;
+}
+
+.ed-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ed-icon {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.ed-icon:hover:not(:disabled) {
+  background: #2c3753;
+}
+
+.ed-icon.danger:hover:not(:disabled) {
+  background: var(--root);
+  border-color: var(--root);
+  color: #0c1018;
+}
+
+.ed-icon:disabled,
+.ed-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.editor-foot {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
