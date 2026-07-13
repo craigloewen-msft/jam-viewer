@@ -28,11 +28,11 @@ the ChordMini backend (below) and point jam-viewer at it via `CHORDMINI_URL`
 
 The [`Containerfile`](./Containerfile) builds the whole app (SSR server + WASM
 client) and bundles `yt-dlp` and `ffmpeg`, so no host toolchain is needed. Build
-and run it with `wslc`:
+and run it with `wslc.exe` (on WSL the container CLI is invoked as `wslc.exe`):
 
 ```bash
-wslc build -f Containerfile -t jam-viewer .
-wslc run -d -p 5002:5002 --name jam-viewer \
+wslc.exe build -f Containerfile -t jam-viewer .
+wslc.exe run -d -p 5002:5002 --name jam-viewer \
   -v ./cache:/data/cache \
   jam-viewer
 ```
@@ -47,7 +47,7 @@ too and point the container at it. Since ChordMini runs in its own container,
 use the host address instead of `localhost`:
 
 ```bash
-wslc run -d -p 5002:5002 --name jam-viewer \
+wslc.exe run -d -p 5002:5002 --name jam-viewer \
   -v ./cache:/data/cache \
   -e CHORDMINI_URL=http://host.docker.internal:5001 \
   jam-viewer
@@ -55,14 +55,32 @@ wslc run -d -p 5002:5002 --name jam-viewer \
 
 ## ChordMini backend (optional, for real songs)
 
-Build and run the image from a clone of
-[ChordMiniApp](https://github.com/ptnghia-j/ChordMiniApp) using `wslc`:
+Real-song chord recognition is provided by [ChordMini](https://github.com/ptnghia-j/ChordMiniApp),
+a separate upstream project. jam-viewer only talks to it over HTTP, so its source
+is intentionally **not** vendored here — you build its container from a clone.
+The backend lives in that repo's `python_backend/` directory and serves gunicorn
+(`app:app`) on port 8080; the run command maps it to host port 5001.
+
+Clone (pinned to the commit this was last verified against) and build/run with
+`wslc.exe`:
 
 ```bash
+git clone https://github.com/ptnghia-j/ChordMiniApp.git
+cd ChordMiniApp
+git checkout 7ee42fd            # pinned: verified against this upstream commit
 cd python_backend
-wslc build -t chordmini-backend .
-wslc run -d -p 5001:8080 --name chordmini chordmini-backend
+wslc.exe build -t chordmini-backend .
+wslc.exe run -d -p 5001:8080 --name chordmini chordmini-backend
 ```
+
+If you've already built the image before, just (re)start the container:
+
+```bash
+wslc.exe start chordmini
+```
+
+jam-viewer talks to it at `POST /api/recognize-chords`; check it's up with
+`curl http://localhost:5001/` (returns `{"status":"healthy"}`).
 
 Then start jam-viewer with the backend URL:
 

@@ -48,8 +48,42 @@ async fn main() {
     log!("jam-viewer listening on http://{}", &addr);
     log!("ChordMini backend: {}", ingest::chordmini_url());
     axum::serve(listener, app.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+}
+
+// Listen for Ctrl+C (SIGINT) and SIGTERM so the server shuts down cleanly.
+// This matters especially in containers, where the binary runs as PID 1:
+// Linux does not apply a signal's default action to PID 1 unless the process
+// installs a handler, so without this Ctrl+C / `stop` would be ignored.
+#[cfg(feature = "ssr")]
+async fn shutdown_signal() {
+    use leptos::logging::log;
+
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    log!("shutdown signal received, stopping jam-viewer");
 }
 
 #[cfg(not(feature = "ssr"))]
